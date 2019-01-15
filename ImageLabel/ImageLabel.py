@@ -1,10 +1,34 @@
+###############################################################################
+# Name:
+#   ImageLabel.py
+#
+# Author:
+#   Maurizio Casini
+#
+# Usage:
+#   Visit https://github.com/mauriziocasini for details
+#
+###############################################################################
+
+
 import os
+import sys
+import urllib
+import logging
 
 from Qt import QtGui, QtCore, QtWidgets
 
 
 class ImageLabel(QtWidgets.QLabel):
-    def __init__(self, parent=None):
+    def __init__(self, image_path=None, parent=None):
+        """
+        Initialize the image label instance variables
+
+        :param image_path: path of the image to show. It could be a file path or a url
+        :type image_path: str
+        :param parent: parent widget reference
+        :type parent: QWidget
+        """
         super(ImageLabel, self).__init__(parent)
 
         self.setFrameStyle(QtWidgets.QFrame.NoFrame)
@@ -14,114 +38,131 @@ class ImageLabel(QtWidgets.QLabel):
 
         self.painter = QtGui.QPainter()
 
-        self.start_draw_point = QtCore.QPoint(0, 0)
-
-        self.is_movie = False
+        self.draw_point = QtCore.QPoint(0, 0)
 
         self.image = None
-        self.movie = None
+        self.scaled_image = None
+        self._oversize = False
 
-        self.oversize = False
+        self.set_image(image_path)
 
     def set_image(self, image_path):
-        self.is_movie = False
+        """
+        Set the image to show
 
-        if self.movie is not None:
-            self.movie.frameChanged.disconnect()
-            self.movie.stop()
-            self.movie = None
+        :param image_path: path of the image to show. It could be a file path or a url
+        :type image_path: str
+        """
 
-        if os.path.exists(image_path):
-            self.image = QtGui.QPixmap(image_path)
+        if image_path is not None:
+            if os.path.exists(image_path):
+                self.image = QtGui.QPixmap(image_path)
+            else:
+                url = urllib.urlopen(image_path)
+                if url.getcode() == 200:
+                    data = url.read()
+                    url.close()
+                    self.image = QtGui.QPixmap()
+                    self.image.loadFromData(data)
+                else:
+                    logging.warning('Unable to download image from "%s"' % image_path)
+        else:
+            self.image = None
 
         self.update()
-
-    def set_movie(self, movie_path):
-        self.is_movie = True
-
-        # if os.path.exists(movie_path):
-        self.movie = QtGui.QMovie(movie_path)
-        self.movie.setCacheMode(QtGui.QMovie.CacheAll)
-        self.movie.jumpToFrame(0)
-        self.image = QtGui.QPixmap(self.movie.frameRect().size())
-        self.movie.frameChanged.connect(self.repaint)
-
-        self.movie.start()
 
     def set_oversize(self, oversize):
-        self.oversize = oversize
+        """
+        Use this function if you want the image to be scaled beyond its original size
 
-    def reset(self):
-        self.is_movie = False
+        :param oversize: value to set
+        :type oversize: bool
+        """
+        self._oversize = oversize
 
-        if self.movie is not None:
-            self.movie.frameChanged.disconnect()
-            self.movie.stop()
-            self.movie = None
+    def clear(self):
+        """
+        Clears any label contents.
+        """
 
-        self.image = QtGui.QPixmap()
+        super(ImageLabel, self).clear()
+
+        self.image = None
 
         self.update()
 
-    def paintEvent(self, event):
-        if self.is_movie:
-            self.image = self.movie.currentPixmap()
-            self.setMask(self.image.mask())
+    def resizeEvent(self, resize_event):
+        """
+        This event handler receives the widget resize events which are passed in the event parameter
+
+        :type resize_event: QResizeEvent
+        """
 
         if self.image is not None:
-            size = self.size()
-            image_size = size
+            if self._oversize:
+                scaled_image_size = resize_event.size()
+            else:
+                scaled_image_size = resize_event.size().boundedTo(self.image.size())
 
-            if not self.oversize:
-                image_size = self.size().boundedTo(self.image.size())
+            self.scaled_image = self.image.scaled(scaled_image_size, QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation)
 
-            scaled_image = self.image.scaled(image_size, QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation)
+    def paintEvent(self, event):
+        """
+        This event handler receives paint events passed in the event parameter
+        It draws the scaled image and calls the base class method
 
+        :type event: QPaintEvent
+        """
+        if self.scaled_image is not None:
             # start painting the label from left upper corner
             if self.alignment() & QtCore.Qt.AlignHCenter:
-                self.start_draw_point.setX((size.width() - scaled_image.width()) / 2)
+                self.draw_point.setX((self.size().width() - self.scaled_image.width()) / 2)
             elif self.alignment() & QtCore.Qt.AlignLeft:
-                self.start_draw_point.setX(0)
+                self.draw_point.setX(0)
             elif self.alignment() & QtCore.Qt.AlignRight:
-                self.start_draw_point.setX(size.width() - scaled_image.width())
+                self.draw_point.setX(self.size().width() - self.scaled_image.width())
 
             if self.alignment() & QtCore.Qt.AlignVCenter:
-                self.start_draw_point.setY((size.height() - scaled_image.height()) / 2)
+                self.draw_point.setY((self.size().height() - self.scaled_image.height()) / 2)
             elif self.alignment() & QtCore.Qt.AlignTop:
-                self.start_draw_point.setY(0)
+                self.draw_point.setY(0)
             elif self.alignment() & QtCore.Qt.AlignBottom:
-                self.start_draw_point.setY(size.height() - scaled_image.height())
+                self.draw_point.setY(self.size().height() - self.scaled_image.height())
 
             self.painter.begin(self)
             self.painter.setRenderHint(QtGui.QPainter.Antialiasing, True)
             self.painter.setRenderHint(QtGui.QPainter.HighQualityAntialiasing, True)
             self.painter.setRenderHint(QtGui.QPainter.SmoothPixmapTransform, True)
-            self.painter.drawPixmap(self.start_draw_point, scaled_image)
+            self.painter.drawPixmap(self.draw_point, self.scaled_image)
             self.painter.end()
+
+        super(ImageLabel, self).paintEvent(event)
 
 
 class Window(QtWidgets.QWidget):
     def __init__(self):
         super(Window, self).__init__()
 
-        layout = QtWidgets.QVBoxLayout()
+        self.setWindowTitle("Image label")
+
+        layout = QtWidgets.QHBoxLayout()
+
+        widget = ImageLabel(image_path=r'.\image.png')
+        widget.setAlignment(QtCore.Qt.AlignCenter)
+        layout.addWidget(widget)
 
         widget = ImageLabel()
-        widget.set_image(r'.\image.png')
+        widget.set_image(r'https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png')
         widget.setAlignment(QtCore.Qt.AlignCenter)
-
+        widget.setText('GitHub')
+        widget.set_oversize(True)
         layout.addWidget(widget)
 
         self.setLayout(layout)
 
-        self.setWindowTitle("Image label")
-
 
 if __name__ == '__main__':
-
-    import sys
-
     app = QtWidgets.QApplication(sys.argv)
-    mainWin = Window()
-    mainWin.show()
+    window = Window()
+    window.show()
     sys.exit(app.exec_())
