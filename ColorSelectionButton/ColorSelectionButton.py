@@ -17,11 +17,9 @@ class ColorSelectionButton(QtWidgets.QPushButton):
 
     color_changed = QtCore.Signal(QtGui.QColor, QtGui.QColor)
 
-    def __init__(self, label=None, callback=None, color=None, parent=None):
+    def __init__(self, label=None, color=None, parent=None):
         super(ColorSelectionButton, self).__init__(parent)
         self.label = label
-
-        self.callback = callback
 
         self._color = color
         self._init_color = color
@@ -29,9 +27,6 @@ class ColorSelectionButton(QtWidgets.QPushButton):
         self.painter = QtGui.QPainter()
 
         self.mouse_pressed = False
-
-        a = QtGui.QColor(128, 255, 64)
-        print a.getHsv()
 
         self.text_options = QtGui.QTextOption()
         self.text_options.setAlignment(QtCore.Qt.AlignCenter)
@@ -71,9 +66,6 @@ class ColorSelectionButton(QtWidgets.QPushButton):
         col = self.dlg.getColor(self._color, parent=self, title='Select a color', options=QtWidgets.QColorDialog.ShowAlphaChannel)
 
         if col.isValid():
-            if self.callback is not None:
-                self.callback(col)
-
             self.set_color(col)
 
     def eventFilter(self, widget, event):
@@ -148,7 +140,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         widget = QtWidgets.QWidget(self)
 
-        q_color_button = ColorSelectionButton(label=None, color=QtGui.QColor(0, 255, 0, 255), callback=self.callback)
+        q_color_button = ColorSelectionButton(label=None, color=QtGui.QColor(0, 255, 0, 255))
         q_color_button.color_changed.connect(self.color_changed)
 
         layout = QtWidgets.QVBoxLayout()
@@ -158,9 +150,6 @@ class MainWindow(QtWidgets.QMainWindow):
         widget.setLayout(layout)
 
         self.setCentralWidget(widget)
-
-    def callback(self, selected_color):
-        print 'Selected color: %s' % selected_color
 
     def color_changed(self, old_color, color):
         print 'Color changed from %s to %s' % (old_color, color)
